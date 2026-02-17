@@ -1,0 +1,311 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Daily Momentum Scanner – US & Canada</title>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    :root {
+      --bg:      #0d1117;
+      --surface: #161b22;
+      --border:  #30363d;
+      --green:   #3fb950;
+      --red:     #f85149;
+      --yellow:  #d29922;
+      --blue:    #58a6ff;
+      --purple:  #8957e5;
+      --text:    #c9d1d9;
+      --muted:   #8b949e;
+      --accent:  #1f6feb;
+    }
+    body {
+      background: var(--bg);
+      color: var(--text);
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, monospace;
+      min-height: 100vh;
+      padding: 28px 16px 56px;
+    }
+    .wrap { max-width: 1320px; margin: 0 auto; }
+
+    /* Header */
+    .hdr { display:flex; align-items:flex-start; justify-content:space-between;
+           flex-wrap:wrap; gap:16px; margin-bottom:24px; }
+    h1   { font-size:1.55rem; font-weight:700; color:#fff; letter-spacing:-.3px; }
+    h1 span { color:var(--blue); }
+    .sub { color:var(--muted); font-size:.8rem; margin-top:5px; }
+
+    /* Scan button */
+    #scanBtn {
+      background:var(--accent); color:#fff; border:none; border-radius:6px;
+      padding:10px 24px; font-size:.93rem; font-weight:600; cursor:pointer;
+      transition:background .2s; white-space:nowrap;
+    }
+    #scanBtn:hover    { background:#388bfd; }
+    #scanBtn:disabled { background:#21262d; color:var(--muted); cursor:not-allowed; }
+
+    /* Pills */
+    .pills { display:flex; flex-wrap:wrap; gap:8px; margin-bottom:22px; }
+    .pill  {
+      display:flex; align-items:center; gap:6px; background:var(--surface);
+      border-radius:20px; padding:4px 12px; font-size:.74rem; color:var(--muted);
+    }
+    .dot { width:7px; height:7px; border-radius:50%; }
+
+    /* Progress */
+    #progressWrap { margin-bottom:18px; display:none; }
+    #progressBar  { background:#21262d; border-radius:4px; height:6px; overflow:hidden; margin-bottom:7px; }
+    #progressFill { height:100%; width:0%; background:linear-gradient(90deg,var(--accent),var(--green));
+                    transition:width .3s; border-radius:4px; }
+    #progressText { color:var(--muted); font-size:.76rem; }
+
+    /* Spinner */
+    #spinnerWrap { text-align:center; padding:48px 0; display:none; }
+    .spinner {
+      display:inline-block; width:34px; height:34px;
+      border:3px solid var(--border); border-top-color:var(--blue);
+      border-radius:50%; animation:spin .8s linear infinite;
+    }
+    @keyframes spin { to { transform:rotate(360deg); } }
+
+    /* Stats */
+    #statsRow { display:none; flex-wrap:wrap; gap:12px; margin-bottom:22px; }
+    .stat { background:var(--surface); border:1px solid var(--border); border-radius:8px; padding:12px 18px; min-width:130px; }
+    .stat .lbl { font-size:.67rem; color:var(--muted); text-transform:uppercase; letter-spacing:.5px; }
+    .stat .val { font-size:1.3rem; font-weight:700; margin-top:3px; }
+
+    /* Error */
+    #errBox {
+      background:rgba(248,81,73,.1); border:1px solid rgba(248,81,73,.3);
+      color:var(--red); padding:15px 18px; border-radius:8px; margin-bottom:16px;
+      font-size:.84rem; display:none;
+    }
+
+    /* Empty */
+    #emptyBox { text-align:center; padding:50px 0; color:var(--muted); line-height:2; display:none; }
+
+    /* Table */
+    #tableWrap { overflow-x:auto; border:1px solid var(--border); border-radius:10px;
+                 margin-bottom:12px; display:none; }
+    table { width:100%; border-collapse:collapse; font-size:.82rem; }
+    thead tr { background:var(--surface); }
+    th {
+      padding:11px 13px; text-align:left; color:var(--muted); font-weight:600;
+      font-size:.68rem; text-transform:uppercase; letter-spacing:.5px;
+      border-bottom:1px solid var(--border); white-space:nowrap;
+    }
+    td { padding:12px 13px; border-bottom:1px solid #21262d; white-space:nowrap; }
+    tbody tr:last-child td { border-bottom:none; }
+    tbody tr:nth-child(even) { background:rgba(255,255,255,.015); }
+
+    .ticker-lbl  { font-weight:700; color:var(--blue); font-size:.9rem; }
+    .badge       { display:inline-block; font-size:.62rem; padding:2px 8px; border-radius:10px; font-weight:700; }
+    .badge-us    { background:#1a3c2a; color:var(--green); }
+    .badge-ca    { background:#1a3a5c; color:var(--blue); }
+    .col-price   { color:#fff; font-weight:600; }
+    .col-pct     { color:var(--green); font-weight:700; }
+    .col-vol     { color:var(--muted); }
+    .col-ratio   { color:var(--yellow); font-weight:700; }
+    .col-rsi-ok  { color:var(--green); font-weight:700; }
+    .col-rsi-hot { color:var(--yellow); font-weight:700; }
+    .col-stop    { color:var(--red); }
+    .col-tgt     { color:var(--green); }
+    .col-rr      { color:var(--green); font-weight:700; }
+    .score-wrap  { display:flex; align-items:center; gap:7px; }
+    .score-bar   { height:6px; border-radius:3px; background:linear-gradient(90deg,var(--accent),var(--green)); min-width:3px; }
+    .score-num   { color:#fff; font-weight:700; font-size:.79rem; }
+
+    /* Footer note + disclaimer */
+    #footNote   { color:var(--muted); font-size:.73rem; margin-bottom:20px; display:none; }
+    .how-box    {
+      background:var(--surface); border:1px solid var(--border); border-radius:8px;
+      padding:14px 18px; margin-bottom:14px; font-size:.79rem; color:var(--muted); line-height:1.8;
+    }
+    .disclaimer {
+      background:rgba(210,153,34,.07); border:1px solid rgba(210,153,34,.22);
+      border-radius:8px; padding:14px 18px; font-size:.76rem; color:var(--muted); line-height:1.7;
+    }
+    .disclaimer strong { color:var(--yellow); }
+
+    @media (max-width:680px) {
+      h1 { font-size:1.15rem; }
+      td, th { padding:9px 9px; }
+    }
+  </style>
+</head>
+<body>
+<div class="wrap">
+
+  <!-- Header -->
+  <div class="hdr">
+    <div>
+      <h1>📈 Daily Momentum Scanner <span>US & Canada</span></h1>
+      <div class="sub">NYSE · NASDAQ · TSX · TSXV &nbsp;|&nbsp; $1–$20 · Volume Spike · RSI · Breakout</div>
+    </div>
+    <button id="scanBtn" onclick="runScan()">⚡ Scan Now</button>
+  </div>
+
+  <!-- Criteria pills -->
+  <div class="pills">
+    <div class="pill"><div class="dot" style="background:#3fb950"></div>Volume &gt; 2× avg</div>
+    <div class="pill"><div class="dot" style="background:#58a6ff"></div>Price +3%+ today</div>
+    <div class="pill"><div class="dot" style="background:#d29922"></div>RSI 50–75</div>
+    <div class="pill"><div class="dot" style="background:#8957e5"></div>Breaks prev-day high</div>
+    <div class="pill"><div class="dot" style="background:#f85149"></div>SL 2% · Target 3.5%</div>
+  </div>
+
+  <!-- Progress -->
+  <div id="progressWrap">
+    <div id="progressBar"><div id="progressFill"></div></div>
+    <div id="progressText">Starting scan…</div>
+  </div>
+
+  <!-- Spinner -->
+  <div id="spinnerWrap">
+    <div class="spinner"></div>
+    <div style="color:var(--muted);margin-top:14px;font-size:.85rem">Fetching market data…</div>
+  </div>
+
+  <!-- Stats -->
+  <div id="statsRow">
+    <div class="stat"><div class="lbl">Tickers Scanned</div><div class="val" id="sScanned" style="color:#58a6ff">–</div></div>
+    <div class="stat"><div class="lbl">Candidates Found</div><div class="val" id="sFound" style="color:#3fb950">–</div></div>
+    <div class="stat"><div class="lbl">Top Picks</div><div class="val" id="sTop" style="color:#fff">–</div></div>
+    <div class="stat"><div class="lbl">Scan Time</div><div class="val" id="sTime" style="color:#d29922;font-size:.85rem">–</div></div>
+  </div>
+
+  <!-- Error -->
+  <div id="errBox"></div>
+
+  <!-- Empty -->
+  <div id="emptyBox">
+    🔍 No momentum candidates passed all filters today.<br>
+    Markets may be closed or stocks are quiet.<br>
+    <span style="font-size:.8rem">Try again during market hours: 9:30 AM – 4:00 PM ET.</span>
+  </div>
+
+  <!-- Table -->
+  <div id="tableWrap">
+    <table>
+      <thead>
+        <tr>
+          <th>#</th><th>Ticker</th><th>Exchange</th><th>Price</th>
+          <th>% Chg</th><th>Volume</th><th>Vol/Avg</th><th>RSI</th>
+          <th>Entry</th><th>Stop Loss</th><th>Target</th><th>R/R</th><th>Score</th>
+        </tr>
+      </thead>
+      <tbody id="tbody"></tbody>
+    </table>
+  </div>
+
+  <!-- Footer note -->
+  <div id="footNote">✅ All picks confirmed: Breaking previous-day high · Entry = spot + 0.1% buffer · Results cached 5 min</div>
+
+  <!-- How it works -->
+  <div class="how-box">
+    <strong style="color:#c9d1d9">🔬 How scoring works:</strong>
+    Volume spike (40pts) + % price change (40pts) + RSI momentum (20pts).
+    All 5 filters must pass:
+    <span style="color:#58a6ff">Price $1–$20</span>,
+    <span style="color:#3fb950">Volume &gt;2× 30-day avg</span>,
+    <span style="color:#58a6ff">Change &gt;3%</span>,
+    <span style="color:#d29922">RSI 50–75</span>,
+    <span style="color:#8957e5">Breakout above prev-day high</span>.
+  </div>
+
+  <!-- Disclaimer -->
+  <div class="disclaimer">
+    <strong>⚠️ Disclaimer:</strong>
+    This is an <strong>educational tool only</strong>. Trading involves significant risk of loss.
+    This scanner does not constitute financial advice. Small-cap and momentum stocks are highly
+    volatile and illiquid. Past performance does not guarantee future results.
+    Never trade more than you can afford to lose.
+  </div>
+
+</div>
+
+<script>
+  const f2 = n => Number(n).toFixed(2);
+  const f3 = n => Number(n).toFixed(3);
+  const fv = n => n >= 1e6 ? (n/1e6).toFixed(1)+"M" : n >= 1e3 ? (n/1e3).toFixed(0)+"K" : String(n);
+
+  function show(id)  { document.getElementById(id).style.display = "flex"; }
+  function hide(id)  { document.getElementById(id).style.display = "none"; }
+  function block(id) { document.getElementById(id).style.display = "block"; }
+  function txt(id,v) { document.getElementById(id).textContent = v; }
+
+  async function runScan() {
+    const btn = document.getElementById("scanBtn");
+    btn.disabled = true;
+    btn.textContent = "⏳ Scanning…";
+
+    // Reset UI
+    hide("statsRow"); hide("tableWrap"); hide("emptyBox");
+    hide("footNote"); hide("errBox");
+    block("progressWrap"); block("spinnerWrap");
+    document.getElementById("progressFill").style.width = "0%";
+    document.getElementById("tbody").innerHTML = "";
+
+    try {
+      const res  = await fetch("/api/scan");
+      if (!res.ok) throw new Error(`Server error ${res.status}`);
+      const data = await res.json();
+
+      // Progress fill complete
+      document.getElementById("progressFill").style.width = "100%";
+      txt("progressText", `✓ Scanned ${data.scanned} tickers in ${data.elapsed}`);
+      hide("spinnerWrap");
+
+      // Stats
+      txt("sScanned", data.scanned);
+      txt("sFound",   data.found);
+      txt("sTop",     data.top5.length);
+      txt("sTime",    data.timestamp);
+      show("statsRow");
+
+      if (!data.top5.length) {
+        block("emptyBox");
+      } else {
+        const tbody = document.getElementById("tbody");
+        data.top5.forEach((s, i) => {
+          const rsiCls = s.rsi >= 65 ? "col-rsi-hot" : "col-rsi-ok";
+          const bw = Math.min(s.score, 100);
+          tbody.insertAdjacentHTML("beforeend", `
+            <tr>
+              <td style="color:var(--muted);font-weight:700">${i+1}</td>
+              <td><span class="ticker-lbl">${s.label}</span></td>
+              <td><span class="badge ${s.exchange==="TSX"?"badge-ca":"badge-us"}">${s.exchange}</span></td>
+              <td class="col-price">$${f3(s.price)}</td>
+              <td class="col-pct">+${f2(s.pct)}%</td>
+              <td class="col-vol">${fv(s.volume)}</td>
+              <td class="col-ratio">${f2(s.volRatio)}×</td>
+              <td class="${rsiCls}">${f2(s.rsi)}</td>
+              <td style="color:#fff">$${f3(s.entry)}</td>
+              <td class="col-stop">$${f3(s.stopLoss)}</td>
+              <td class="col-tgt">$${f3(s.target)}</td>
+              <td class="col-rr">1:${f2(s.rrRatio)}</td>
+              <td><div class="score-wrap">
+                <div class="score-bar" style="width:${bw}px"></div>
+                <span class="score-num">${f2(s.score)}</span>
+              </div></td>
+            </tr>`);
+        });
+        block("tableWrap"); block("footNote");
+      }
+
+    } catch (e) {
+      hide("spinnerWrap"); hide("progressWrap");
+      const eb = document.getElementById("errBox");
+      eb.innerHTML = `❌ <strong>Error:</strong> ${e.message}. Check that the server is running.`;
+      block("errBox");
+    }
+
+    btn.disabled = false;
+    btn.textContent = "⚡ Scan Now";
+  }
+
+  // Auto-scan on load
+  window.addEventListener("DOMContentLoaded", runScan);
+</script>
+</body>
+</html>
